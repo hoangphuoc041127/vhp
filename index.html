@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thực Phẩm Xanh - Sạch từ Nông Trại</title>
+  <link rel="stylesheet" href="mới 7.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- ===== FIREBASE SDK (v10 modular via CDN – compat build) ===== -->
+  <!-- Dùng compat để gọi kiểu window.firebase.* dễ dàng tích hợp với code hiện có -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* ===== STOCK BADGES ===== */
+    .stock-badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;margin-bottom:6px}
+    .stock-out{background:#fee2e2;color:#b91c1c}.stock-low{background:#fff7ed;color:#c2410c}
+    .sold-out-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:3}
+    .sold-out-overlay span{background:#b91c1c;color:#fff;font-size:13px;font-weight:700;padding:6px 18px;border-radius:20px;letter-spacing:0.5px}
+
+    /* ===== ADMIN TABS ===== */
+    .admin-tabs{display:flex;gap:0;border-bottom:2px solid #e5e7eb;margin-bottom:24px;padding:0 24px;flex-wrap:wrap}
+    .admin-tab-btn{padding:10px 18px;border:none;background:none;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:color .2s,border-color .2s;white-space:nowrap}
+    .admin-tab-btn.active{color:#1a7a3c;border-bottom-color:#1a7a3c}
+    .admin-tab-content{display:none}.admin-tab-content.active{display:block}
+
+    /* ===== STOCK ===== */
+    .stock-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+    .stock-summary-card{background:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px;border:1px solid #e5e7eb}
+    .stock-summary-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .icon-out{background:#fee2e2;color:#b91c1c}.icon-low{background:#fff7ed;color:#c2410c}.icon-ok{background:#dcfce7;color:#15803d}
+    .stock-summary-num{font-size:24px;font-weight:800;color:#111827;line-height:1}
+    .stock-summary-label{font-size:12px;color:#6b7280;margin-top:2px;font-weight:500}
+    .stock-table-wrap{background:#fff;border-radius:12px;overflow:auto;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+    .stock-table{width:100%;border-collapse:collapse;min-width:620px}
+    .stock-table th{padding:13px 16px;text-align:left;font-size:12px;font-weight:700;color:#6b7280;border-bottom:2px solid #e5e7eb;background:#f9fafb;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px}
+    .stock-table td{padding:12px 16px;font-size:13px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+    .stock-table tr:last-child td{border-bottom:none}
+    .stock-table tr.row-out td{background:#fef2f2}.stock-table tr.row-low td{background:#fffbeb}
+    .stock-status-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px}
+    .badge-out{background:#fee2e2;color:#b91c1c}.badge-low{background:#fff7ed;color:#c2410c}.badge-ok{background:#dcfce7;color:#15803d}
+    .stock-qty-control{display:flex;align-items:center;gap:6px}
+    .stock-qty-btn{width:28px;height:28px;border-radius:6px;border:1.5px solid #e5e7eb;background:#fff;font-size:16px;font-weight:700;color:#374151;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;line-height:1}
+    .stock-qty-btn:hover{background:#1a7a3c;color:#fff;border-color:#1a7a3c}
+    .stock-qty-input{width:68px;padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:6px;font-size:13px;font-weight:700;text-align:center;color:#111827;transition:border-color .2s}
+    .stock-qty-input:focus{outline:none;border-color:#1a7a3c}
+    .stock-action-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .15s;white-space:nowrap}
+    .btn-restock{color:#1a7a3c;border-color:#1a7a3c;background:none}.btn-restock:hover{background:#1a7a3c;color:#fff}
+    .btn-zero{color:#6b7280;border-color:#d1d5db;background:none}.btn-zero:hover{background:#f3f4f6}
+    .stock-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .stock-toolbar input[type="text"]{flex:1;min-width:180px;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px}
+    .stock-toolbar select{padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;color:#374151;background:#fff}
+    .btn-export-stock{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;background:#1a7a3c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+    .btn-export-stock:hover{background:#155f30}
+
+    /* ===== IMAGE MANAGER ===== */
+    .img-manager-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+    .img-manager-toolbar input[type="text"]{flex:1;min-width:180px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px}
+    .btn-upload-new{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;background:#1a7a3c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+    .btn-upload-new:hover{background:#155f30}
+    .img-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+    .img-card{border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;transition:box-shadow .2s;position:relative}
+    .img-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
+    .img-card-thumb{width:100%;height:130px;object-fit:cover;display:block;background:#f3f4f6}
+    .img-card-thumb-placeholder{width:100%;height:130px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;color:#d1d5db;font-size:40px}
+    .img-card-body{padding:10px 10px 8px}
+    .img-card-name{font-size:13px;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .img-card-meta{font-size:11px;color:#9ca3af;margin-top:2px}
+    .img-card-actions{display:flex;gap:6px;padding:0 10px 10px}
+    .img-card-actions button{flex:1;padding:5px 0;font-size:12px;border:1px solid #e5e7eb;background:#fff;border-radius:6px;cursor:pointer}
+    .btn-assign-img{background:#1a7a3c !important;color:#fff !important;border-color:#1a7a3c !important;font-weight:600}
+    .btn-delete-img{color:#ef4444 !important;border-color:#fca5a5 !important}
+    .img-card-badge{position:absolute;top:8px;right:8px;background:#1a7a3c;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+    /* Firebase badge */
+    .img-card-badge-fb{position:absolute;top:8px;left:8px;background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;display:flex;align-items:center;gap:4px}
+    /* Upload progress */
+    .img-upload-progress{height:3px;background:#e5e7eb;border-radius:0 0 10px 10px;overflow:hidden;position:absolute;bottom:0;left:0;right:0}
+    .img-upload-progress-bar{height:100%;background:#1a7a3c;width:0%;transition:width .3s}
+    /* Firebase status bar */
+    .fb-status-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:14px}
+    .fb-status-bar.connected{background:#dcfce7;color:#15803d}
+    .fb-status-bar.connecting{background:#fff7ed;color:#c2410c}
+    .fb-status-bar.error{background:#fee2e2;color:#b91c1c}
+    .fb-status-bar.local{background:#f3f4f6;color:#6b7280}
+
+    /* ===== ASSIGN MODAL ===== */
+    .assign-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center}
+    .assign-modal-overlay.open{display:flex}
+    .assign-modal{background:#fff;border-radius:16px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .assign-modal h3{font-size:18px;font-weight:700;margin-bottom:14px;color:#111827}
+    .assign-modal-img{width:100%;height:180px;object-fit:cover;border-radius:10px;margin-bottom:16px;border:1px solid #e5e7eb}
+    .assign-modal label{font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px}
+    .assign-modal select{width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:16px}
+    .assign-modal-footer{display:flex;gap:10px;justify-content:flex-end}
+    .btn-cancel-modal{padding:9px 18px;border:1px solid #d1d5db;background:#fff;border-radius:8px;font-size:14px;cursor:pointer}
+    .btn-confirm-modal{padding:9px 18px;background:#1a7a3c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+
+    /* ===== SOCIAL LOGIN MODAL ===== */
+    .social-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;align-items:center;justify-content:center}
+    .social-modal-overlay.open{display:flex}
+    .social-modal{background:#fff;border-radius:20px;padding:32px;width:400px;max-width:95vw;box-shadow:0 24px 80px rgba(0,0,0,.2);position:relative}
+    .social-modal-icon{text-align:center;margin-bottom:12px}
+    .social-modal h3{font-size:20px;font-weight:800;color:#111827;text-align:center;margin-bottom:6px}
+    .social-modal p{font-size:13px;color:#6b7280;text-align:center;margin-bottom:22px}
+    .social-modal .form-group label{font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px}
+    .social-modal .form-group input{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;transition:border-color .2s}
+    .social-modal .form-group input:focus{outline:none;border-color:#1a7a3c}
+    .social-modal .form-group{margin-bottom:14px}
+    .btn-social-confirm{width:100%;padding:13px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .2s;margin-top:6px}
+    .btn-google-confirm{background:#ea4335;color:#fff}.btn-facebook-confirm{background:#1877f2;color:#fff}
+    .btn-social-confirm:hover{opacity:.88}
+    .btn-social-close{position:absolute;top:14px;right:14px;background:#f3f4f6;border:none;width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#6b7280}
+    .social-note{font-size:11px;color:#9ca3af;text-align:center;margin-top:12px}
+
+    /* ===== ADDRESS MODAL ===== */
+    .address-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;align-items:center;justify-content:center}
+    .address-modal-overlay.open{display:flex}
+    .address-modal{background:#fff;border-radius:20px;padding:32px;width:440px;max-width:95vw;box-shadow:0 24px 80px rgba(0,0,0,.2)}
+    .address-modal-icon{width:56px;height:56px;background:#e8f5ee;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;color:#1a7a3c}
+    .address-modal h3{font-size:20px;font-weight:800;color:#111827;text-align:center;margin-bottom:6px}
+    .address-modal p{font-size:13px;color:#6b7280;text-align:center;margin-bottom:22px;line-height:1.5}
+    .address-modal label{font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px}
+    .address-modal input,.address-modal textarea{width:100%;padding:11px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;transition:border-color .2s}
+    .address-modal input:focus,.address-modal textarea:focus{outline:none;border-color:#1a7a3c}
+    .address-modal textarea{resize:vertical;min-height:80px;margin-bottom:14px}
+    .address-modal-footer{display:flex;gap:10px;margin-top:16px}
+    .btn-skip-address{flex:1;padding:12px;border:1.5px solid #e5e7eb;background:#fff;border-radius:10px;font-size:14px;cursor:pointer;color:#6b7280;font-weight:600}
+    .btn-save-address{flex:2;padding:12px;background:#1a7a3c;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer}
+    .btn-save-address:hover{background:#155f30}
+    .address-error{background:#fef2f2;color:#b91c1c;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+    .social-login-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+    .btn-social-google{padding:10px;border-radius:10px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;border:1.5px solid #e5e7eb;background:#fff;color:#ea4335;cursor:pointer}
+    .btn-social-google:hover{background:#ffeeed;border-color:#ea4335}
+    .btn-social-fb{padding:10px;border-radius:10px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;border:1.5px solid #e5e7eb;background:#fff;color:#1877f2;cursor:pointer}
+    .btn-social-fb:hover{background:#e8f0fd;border-color:#1877f2}
+
+    /* ===== USER DROPDOWN ===== */
+    .user-menu-wrap{position:relative;display:flex;align-items:center}
+    .user-dropdown{display:none;position:absolute;top:calc(100% + 10px);right:0;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.14),0 2px 8px rgba(0,0,0,0.08);border:1px solid #e5e7eb;min-width:220px;z-index:3000;overflow:hidden;animation:dropdownFadeIn .18s ease}
+    .user-dropdown.open{display:block}
+    @keyframes dropdownFadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    .user-dropdown-header{padding:16px 18px 12px;border-bottom:1px solid #f3f4f6;background:linear-gradient(135deg,#f0fdf4 0%,#fff 100%)}
+    .user-dropdown-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1a7a3c,#2db86b);color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:8px;flex-shrink:0;overflow:hidden}
+    .user-dropdown-name{font-size:14px;font-weight:700;color:#111827;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+    .user-dropdown-email{font-size:12px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+    .user-dropdown-menu{padding:6px 0}
+    .user-dropdown-item{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:#374151;cursor:pointer;transition:background .15s,color .15s;border:none;background:none;width:100%;text-align:left}
+    .user-dropdown-item i{font-size:15px;width:18px;text-align:center;color:#9ca3af;transition:color .15s}
+    .user-dropdown-item:hover{background:#f0fdf4;color:#1a7a3c}.user-dropdown-item:hover i{color:#1a7a3c}
+    .user-dropdown-divider{height:1px;background:#f3f4f6;margin:4px 0}
+    .user-dropdown-item.logout-item{color:#dc2626}.user-dropdown-item.logout-item i{color:#dc2626}
+    .user-dropdown-item.logout-item:hover{background:#fef2f2;color:#b91c1c}.user-dropdown-item.logout-item:hover i{color:#b91c1c}
+    .user-caret{font-size:10px;margin-left:3px;color:#9ca3af;transition:transform .2s}
+
+    /* ===== LOGOUT CONFIRM ===== */
+    .logout-confirm-bar{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.16);border:1px solid #e5e7eb;padding:16px 24px;z-index:9999;align-items:center;gap:16px;min-width:320px;max-width:90vw}
+    .logout-confirm-bar.open{display:flex;animation:dropdownFadeIn .2s ease}
+    .logout-confirm-bar p{font-size:14px;color:#374151;font-weight:500;flex:1;margin:0}
+    .logout-confirm-bar p small{display:block;font-size:12px;color:#9ca3af;font-weight:400;margin-top:2px}
+    .btn-logout-yes{padding:8px 18px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+    .btn-logout-yes:hover{background:#b91c1c}
+    .btn-logout-no{padding:8px 14px;background:none;border:1.5px solid #e5e7eb;color:#6b7280;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+    .btn-logout-no:hover{background:#f9fafb}
+
+    /* ===== SYNC STATUS ===== */
+    .sync-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#15803d;background:#dcfce7;padding:3px 10px;border-radius:20px;margin-left:8px}
+    .sync-status i{font-size:9px}.sync-status.offline{color:#6b7280;background:#f3f4f6}
+
+    /* ===== ADMIN AVATAR ===== */
+    .admin-header-left{display:flex;align-items:center;gap:14px}
+    .admin-avatar-mini-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
+    .admin-avatar-mini{position:relative;width:46px;height:46px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,.55);flex-shrink:0;background:#fff}
+    .admin-avatar-mini img{width:100%;height:100%;object-fit:cover;display:block}
+    .admin-avatar-mini-edit{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);color:#fff;font-size:14px;cursor:pointer;opacity:0;transition:opacity .15s}
+    .admin-avatar-mini:hover .admin-avatar-mini-edit{opacity:1}
+    .admin-avatar-mini-reset{width:26px;height:26px;border-radius:50%;flex-shrink:0;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.35);color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+    .admin-avatar-mini-reset:hover{background:rgba(239,68,68,.75);border-color:transparent}
+
+    /* ===== PROMO POPUP ===== */
+    .promo-popup-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,18,.6);z-index:5000;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(2px)}
+    .promo-popup-overlay.open{display:flex;animation:promoFadeIn .25s ease}
+    @keyframes promoFadeIn{from{opacity:0}to{opacity:1}}
+    .promo-popup{position:relative;width:520px;max-width:100%;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35);animation:promoPopIn .35s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes promoPopIn{from{opacity:0;transform:scale(.9) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    .promo-popup-close{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.85);border:none;font-size:15px;color:#374151;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;transition:background .15s}
+    .promo-popup-close:hover{background:#fff}
+    .promo-popup-header{background:linear-gradient(135deg,#1a7a3c 0%,#2db86b 60%,#7fd99a 100%);padding:26px 28px 70px;position:relative;color:#fff;overflow:hidden}
+    .promo-popup-header::before{content:'';position:absolute;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.12);top:-90px;right:-60px}
+    .promo-popup-header::after{content:'';position:absolute;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,.10);bottom:-80px;left:-40px}
+    .promo-popup-flash-tag{display:inline-flex;align-items:center;gap:6px;background:#fff;color:#e53935;font-size:12px;font-weight:800;padding:5px 12px;border-radius:20px;margin-bottom:14px;position:relative;z-index:1;letter-spacing:.3px}
+    .promo-popup-header h2{font-size:26px;font-weight:800;line-height:1.25;margin-bottom:6px;position:relative;z-index:1}
+    .promo-popup-header p{font-size:14px;opacity:.95;position:relative;z-index:1;max-width:380px}
+    .promo-popup-countdown{position:relative;z-index:1;display:flex;gap:8px;margin-top:16px}
+    .promo-popup-countdown div{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:6px 10px;font-size:15px;font-weight:800;min-width:42px;text-align:center}
+    .promo-popup-countdown span{font-size:10px;display:block;font-weight:500;opacity:.85;margin-top:2px}
+    .promo-popup-body{padding:22px 28px 10px;margin-top:-46px;position:relative;z-index:2}
+    .promo-popup-products{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+    .promo-popup-product{background:#fff;border:1px solid #eef2ef;border-radius:14px;padding:10px 8px 12px;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.07);cursor:pointer;transition:transform .15s,box-shadow .15s}
+    .promo-popup-product:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.12)}
+    .promo-popup-product img{width:100%;height:64px;object-fit:cover;border-radius:10px;margin-bottom:8px;background:#f3f4f6}
+    .promo-popup-product .pname{font-size:11.5px;font-weight:600;color:#1f2937;line-height:1.3;height:30px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+    .promo-popup-product .pprice{font-size:12.5px;font-weight:800;color:#e53935;margin-top:4px}
+    .promo-popup-product .pdisc{display:inline-block;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-top:3px}
+    .promo-popup-perks{display:flex;justify-content:space-between;gap:8px;margin-bottom:18px;padding:0 4px}
+    .promo-popup-perks div{text-align:center;flex:1;font-size:11px;color:#4b5563;font-weight:600}
+    .promo-popup-perks i{display:block;font-size:18px;color:#1a7a3c;margin-bottom:5px}
+    .promo-popup-footer{padding:0 28px 26px}
+    .btn-promo-cta{width:100%;padding:14px;background:linear-gradient(135deg,#1a7a3c,#2db86b);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 8px 20px rgba(26,122,60,.3);transition:opacity .15s;letter-spacing:.2px}
+    .btn-promo-cta:hover{opacity:.92}
+    .btn-promo-later{width:100%;text-align:center;background:none;border:none;color:#9ca3af;font-size:12.5px;margin-top:10px;cursor:pointer;text-decoration:underline}
+
+    /* ===== MY ORDERS PANEL ===== */
+    .my-orders-panel{position:fixed;top:0;right:-520px;width:520px;max-width:95vw;height:100vh;background:#f8faf8;z-index:3001;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.2);transition:right .35s cubic-bezier(.4,0,.2,1)}
+    .my-orders-panel.open{right:0}
+    .my-orders-header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;background:#1a7a3c;color:#fff;flex-shrink:0}
+    .my-orders-header h2{font-size:19px;font-weight:700;display:flex;align-items:center;gap:10px}
+    .my-orders-header button{background:rgba(255,255,255,.18);color:#fff;width:34px;height:34px;border-radius:8px;font-size:15px;border:none;cursor:pointer;transition:background .15s}
+    .my-orders-header button:hover{background:rgba(255,255,255,.32)}
+    .my-orders-filters{display:flex;gap:6px;padding:14px 20px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid #e5e7eb;background:#fff}
+    .mo-filter-btn{padding:7px 14px;border-radius:20px;font-size:12.5px;font-weight:600;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+    .mo-filter-btn:hover{border-color:#1a7a3c;color:#1a7a3c}.mo-filter-btn.active{background:#1a7a3c;color:#fff;border-color:#1a7a3c}
+    .my-orders-list{flex:1;overflow-y:auto;padding:16px 20px 28px;display:flex;flex-direction:column;gap:14px}
+    .mo-empty{text-align:center;padding:80px 20px;color:#9ca3af}
+    .mo-empty i{font-size:54px;color:#d1d5db;display:block;margin-bottom:14px}
+    .mo-empty p{font-size:15px;font-weight:600;color:#6b7280;margin-bottom:4px}
+    .mo-empty small{font-size:12.5px;color:#9ca3af}
+    .mo-card{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(0,0,0,.06);border:1px solid #f0f2f0}
+    .mo-card-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px}
+    .mo-order-id{font-size:14px;font-weight:800;color:#111827;display:block}
+    .mo-order-time{font-size:11.5px;color:#9ca3af;display:block;margin-top:2px}
+    .mo-stepper{display:flex;align-items:flex-start;margin:16px 0 14px}
+    .mo-step{display:flex;flex-direction:column;align-items:center;gap:6px;width:76px;flex-shrink:0}
+    .mo-step-dot{width:24px;height:24px;border-radius:50%;background:#e5e7eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .2s}
+    .mo-step.done .mo-step-dot,.mo-step.current .mo-step-dot{background:#1a7a3c}
+    .mo-step.current .mo-step-dot{box-shadow:0 0 0 4px rgba(26,122,60,.18)}
+    .mo-step span{font-size:10.5px;color:#9ca3af;font-weight:600;text-align:center;line-height:1.3}
+    .mo-step.done span,.mo-step.current span{color:#1a7a3c}
+    .mo-step-line{flex:1;height:2px;background:#e5e7eb;margin-top:12px}
+    .mo-step-line.done{background:#1a7a3c}
+    .mo-cancelled-note{display:flex;align-items:center;gap:8px;background:#fef2f2;color:#b91c1c;font-size:12.5px;font-weight:600;padding:10px 14px;border-radius:8px;margin:14px 0}
+    .mo-items{border-top:1px dashed #e5e7eb;border-bottom:1px dashed #e5e7eb;padding:10px 0;margin-bottom:10px}
+    .mo-item-row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;color:#374151}
+    .mo-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .mo-item-qty{color:#9ca3af;font-weight:500}
+    .mo-item-price{font-weight:600;color:#374151;flex-shrink:0}
+    .mo-card-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;font-size:12px;color:#6b7280}
+    .mo-card-foot-addr{max-width:280px}
+    .mo-card-foot-addr strong{color:#374151;font-weight:600}
+    .mo-total{font-size:16px;font-weight:800;color:#e53935;white-space:nowrap}
+    .mo-active-badge{position:absolute;top:-3px;right:-3px;background:#e53935;color:#fff;border-radius:50%;width:8px;height:8px;display:none}
+
+    /* ===== ACCOUNT PANEL ===== */
+    #accountPanel{position:fixed;top:0;right:-560px;width:520px;max-width:95vw;height:100vh;background:#f8faf8;z-index:3002;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.2);transition:right .35s cubic-bezier(.4,0,.2,1);overflow-y:auto}
+    #accountPanel.open{right:0}
+    .ap-header{display:flex;align-items:center;justify-content:space-between;padding:20px 28px;background:#1a7a3c;color:#fff;position:sticky;top:0;z-index:1;flex-shrink:0}
+    .ap-header h2{font-size:19px;font-weight:700;display:flex;align-items:center;gap:10px}
+    .ap-header button{background:rgba(255,255,255,.18);color:#fff;width:34px;height:34px;border-radius:8px;font-size:15px;border:none;cursor:pointer;transition:background .15s}
+    .ap-header button:hover{background:rgba(255,255,255,.32)}
+    .ap-body{padding:24px 28px 0;flex:1}
+    .ap-avatar-section{display:flex;align-items:center;gap:20px;margin-bottom:24px;background:#fff;border-radius:16px;padding:20px;box-shadow:0 2px 10px rgba(0,0,0,.06);border:1px solid #f0f2f0}
+    .ap-avatar-wrap{position:relative;flex-shrink:0}
+    .ap-avatar-circle{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#1a7a3c,#2db86b);color:#fff;font-size:30px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;border:3px solid #fff;box-shadow:0 4px 14px rgba(26,122,60,.25)}
+    .ap-avatar-edit-btn{position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:#1a7a3c;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid #fff;transition:background .15s}
+    .ap-avatar-edit-btn:hover{background:#155f30}
+    .ap-avatar-name{font-size:17px;font-weight:700;color:#111827}
+    .ap-avatar-email{font-size:13px;color:#6b7280;margin-top:2px;word-break:break-all}
+    .ap-provider-badge{display:inline-flex;align-items:center;gap:5px;background:#e8f0fd;color:#1877f2;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+    .ap-avatar-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    .ap-btn-outline{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;transition:all .15s;font-family:inherit}
+    .ap-btn-outline:hover{background:#f3f4f6;border-color:#9ca3af}
+    .ap-btn-danger{color:#dc2626 !important;border-color:#fca5a5 !important}
+    .ap-btn-danger:hover{background:#fef2f2 !important;border-color:#dc2626 !important}
+    .ap-section-card{background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.06);border:1px solid #f0f2f0}
+    .ap-section-title{font-size:14px;font-weight:700;color:#374151;display:flex;align-items:center;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #f3f4f6}
+    .ap-section-title i{color:#1a7a3c;font-size:15px}
+    .ap-form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .ap-form-group{margin-bottom:16px}
+    .ap-form-group:last-child{margin-bottom:0}
+    .ap-form-group label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+    .ap-form-group input[type="text"],.ap-form-group input[type="tel"],.ap-form-group input[type="password"],.ap-form-group textarea{width:100%;padding:10px 14px;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;font-family:inherit;transition:border-color .2s;background:#fff;color:#111827;box-sizing:border-box}
+    .ap-form-group input:focus,.ap-form-group textarea:focus{outline:none;border-color:#1a7a3c;box-shadow:0 0 0 3px rgba(26,122,60,.08)}
+    .ap-readonly-box{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:10px;font-size:14px;color:#374151;gap:8px}
+    .ap-readonly-badge{display:inline-flex;align-items:center;gap:4px;background:#e5e7eb;color:#6b7280;font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+    .ap-pw-wrap{position:relative}
+    .ap-pw-wrap input{padding-right:42px}
+    .ap-toggle-pw{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#9ca3af;cursor:pointer;font-size:14px}
+    .ap-btn-primary{display:inline-flex;align-items:center;gap:8px;width:100%;padding:12px;justify-content:center;background:#1a7a3c;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s;font-family:inherit}
+    .ap-btn-primary:hover{background:#155f30}
+    .ap-btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border:1.5px solid #1a7a3c;background:none;color:#1a7a3c;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit}
+    .ap-btn-secondary:hover{background:#1a7a3c;color:#fff}
+    .ap-msg{padding:10px 14px;border-radius:8px;font-size:13px;font-weight:500;margin-bottom:14px;display:none}
+    .ap-join-info{display:flex;align-items:center;gap:6px;font-size:12px;color:#9ca3af;margin-top:4px}
+    .ap-spacer{height:28px}
+    @media(max-width:480px){#accountPanel{width:100vw}.ap-body{padding:16px 16px 0}.ap-form-row{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-top">
+    <div class="container">
+      <div class="header-logo">
+        <div class="logo">
+          <div class="logo-icon-wrap" style="font-size:28px;color:#fff"><i class="fas fa-leaf"></i></div>
+          <div>
+            <span class="logo-main">Thực Phẩm Xanh</span>
+            <span class="logo-sub">Sạch từ nông trại đến bàn ăn</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-search">
+        <input type="text" id="searchInput" placeholder="Tìm kiếm rau củ, trái cây, thực phẩm sạch..." />
+        <button onclick="searchProducts()"><i class="fas fa-search"></i></button>
+      </div>
+      <div class="header-actions">
+        <div class="action-btn" onclick="toggleCart()">
+          <i class="fas fa-shopping-cart"></i>
+          <span class="badge" id="cartBadge">0</span>
+          <span class="action-label">Giỏ hàng</span>
+        </div>
+
+        <div class="user-menu-wrap" id="userMenuWrap">
+          <div class="action-btn" id="authBtn" onclick="showAuthModal('login')" style="display:flex">
+            <i class="fas fa-user"></i>
+            <span class="action-label" id="authLabel">Đăng nhập</span>
+          </div>
+          <div class="action-btn" id="userMenuBtn" onclick="toggleUserDropdown(event)" style="display:none;cursor:pointer;position:relative">
+            <i class="fas fa-user-circle" style="color:#2db86b"></i>
+            <span class="action-label" id="userDisplayName" style="color:#1a7a3c;font-weight:700;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+            <i class="fas fa-chevron-down user-caret" id="userCaret"></i>
+          </div>
+          <div class="user-dropdown" id="userDropdown">
+            <div class="user-dropdown-header">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="user-dropdown-avatar" id="dropdownAvatar">U</div>
+                <div>
+                  <div class="user-dropdown-name" id="dropdownName">Người dùng</div>
+                  <div class="user-dropdown-email" id="dropdownEmail">email@example.com</div>
+                </div>
+              </div>
+            </div>
+            <div class="user-dropdown-menu">
+              <button class="user-dropdown-item" onclick="closeUserDropdown();openAccountPanel()">
+                <i class="fas fa-user"></i> Thông tin tài khoản
+              </button>
+              <button class="user-dropdown-item" onclick="closeUserDropdown();openMyOrdersModal()" style="position:relative">
+                <i class="fas fa-box"></i> Đơn hàng của tôi
+                <span class="mo-active-badge" id="moActiveBadge"></span>
+              </button>
+              <button class="user-dropdown-item" onclick="closeUserDropdown();openAddressModal()">
+                <i class="fas fa-map-marker-alt"></i> Địa chỉ giao hàng
+              </button>
+              <div class="user-dropdown-divider"></div>
+              <button class="user-dropdown-item logout-item" onclick="closeUserDropdown();showLogoutConfirm()">
+                <i class="fas fa-sign-out-alt"></i> Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-btn" id="adminBtn" onclick="showAdminPanel()" style="display:flex">
+          <i class="fas fa-chart-bar"></i>
+          <span class="action-label">Admin</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="header-nav">
+    <div class="container">
+      <ul class="nav-list">
+        <li><a href="#" onclick="filterCategory('all');return false" class="active">Tất cả</a></li>
+        <li><a href="#" onclick="filterCategory('rau');return false">Rau củ</a></li>
+        <li><a href="#" onclick="filterCategory('trai-cay');return false">Trái cây</a></li>
+        <li><a href="#" onclick="filterCategory('thit');return false">Thịt sạch</a></li>
+        <li><a href="#" onclick="filterCategory('hai-san');return false">Hải sản</a></li>
+        <li><a href="#" onclick="filterCategory('trung-sua');return false">Trứng &amp; Sữa</a></li>
+        <li><a href="#" onclick="filterCategory('ngu-coc');return false">Ngũ cốc</a></li>
+        <li><a href="#" onclick="filterCategory('gia-vi');return false">Gia vị</a></li>
+      </ul>
+    </div>
+  </nav>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-slides" id="heroSlides">
+    <div class="hero-slide active">
+      <div class="hero-content">
+        <span class="hero-badge">100% Hữu cơ</span>
+        <h1>Rau Củ Sạch<br><span>Tươi Mỗi Ngày</span></h1>
+        <p>Đặt hàng trước 10h, giao trong ngày. Cam kết nguồn gốc rõ ràng.</p>
+        <button class="btn-hero" onclick="filterCategory('rau')">Khám phá ngay</button>
+      </div>
+    </div>
+  </div>
+  <div class="hero-stats">
+    <div class="stat"><span class="stat-num">500+</span><span>Sản phẩm sạch</span></div>
+    <div class="stat"><span class="stat-num">50K+</span><span>Khách hàng tin dùng</span></div>
+    <div class="stat"><span class="stat-num">100%</span><span>Nguồn gốc rõ ràng</span></div>
+    <div class="stat"><span class="stat-num">2h</span><span>Giao hàng nhanh</span></div>
+  </div>
+</section>
+
+<!-- PROMO -->
+<section class="promo-section">
+  <div class="container">
+    <div class="promo-grid">
+      <div class="promo-card promo-green"><div><h3>Rau hữu cơ</h3><p>Giảm đến <strong>30%</strong></p><button onclick="filterCategory('rau')">Mua ngay</button></div></div>
+      <div class="promo-card promo-orange"><div><h3>Trái cây nhập khẩu</h3><p>Freeship đơn từ <strong>299K</strong></p><button onclick="filterCategory('trai-cay')">Xem thêm</button></div></div>
+      <div class="promo-card promo-red"><div><h3>Thịt &amp; Hải sản</h3><p>Đông lạnh IQF <strong>tươi ngon</strong></p><button onclick="filterCategory('thit')">Chọn ngay</button></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FLASH SALE -->
+<section class="flash-sale">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-title">
+        <i class="fas fa-bolt flash-icon"></i>
+        <h2>Flash Sale</h2>
+        <span class="flash-badge">Kết thúc sau</span>
+        <div class="countdown" id="countdown">
+          <span id="hours">05</span>:<span id="minutes">30</span>:<span id="seconds">00</span>
+        </div>
+      </div>
+      <a href="#" class="see-all">Xem tất cả</a>
+    </div>
+    <div class="products-grid" id="flashSaleGrid"></div>
+  </div>
+</section>
+
+<!-- MAIN PRODUCTS -->
+<section class="products-section">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title-plain">Tất cả sản phẩm</h2>
+      <div class="sort-bar">
+        <select id="sortSelect" onchange="sortProducts()">
+          <option value="default">Mặc định</option>
+          <option value="price-asc">Giá tăng dần</option>
+          <option value="price-desc">Giá giảm dần</option>
+          <option value="name">Tên A-Z</option>
+        </select>
+      </div>
+    </div>
+    <div class="products-grid" id="productsGrid"></div>
+    <div id="noResults" style="display:none;text-align:center;padding:60px;color:#888">
+      <i class="fas fa-search" style="font-size:60px;color:#d1d5db"></i>
+      <p style="font-size:18px;margin-top:12px">Không tìm thấy sản phẩm phù hợp</p>
+    </div>
+  </div>
+</section>
+
+<!-- CART SIDEBAR -->
+<div class="cart-overlay" id="cartOverlay" onclick="toggleCart()"></div>
+<aside class="cart-sidebar" id="cartSidebar">
+  <div class="cart-header">
+    <h3><i class="fas fa-shopping-cart"></i> Giỏ hàng (<span id="cartCount">0</span>)</h3>
+    <button onclick="toggleCart()"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="cart-items" id="cartItems">
+    <div class="cart-empty">
+      <i class="fas fa-shopping-cart" style="font-size:48px;color:#d1d5db;display:block;margin-bottom:12px"></i>
+      <p>Giỏ hàng trống</p><small>Hãy thêm sản phẩm vào giỏ</small>
+    </div>
+  </div>
+  <div class="cart-footer" id="cartFooter" style="display:none">
+    <div class="cart-total"><span>Tạm tính:</span><strong id="cartTotal">0₫</strong></div>
+    <div class="cart-total"><span>Phí ship:</span><strong id="cartShip">0₫</strong></div>
+    <div class="cart-total cart-final"><span>Tổng cộng:</span><strong id="cartFinal">0₫</strong></div>
+    <button class="btn-checkout" onclick="checkout()">Đặt hàng ngay</button>
+    <button class="btn-clear" onclick="clearCart()">Xóa giỏ hàng</button>
+  </div>
+</aside>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authOverlay" onclick="closeModal()"></div>
+<div class="modal" id="authModal">
+  <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+  <div id="loginTab">
+    <div class="modal-logo">Thực Phẩm Xanh</div>
+    <h2 class="modal-title">Đăng nhập</h2>
+    <div class="tab-switcher">
+      <button class="tab-btn active" onclick="switchTab('login')">Đăng nhập</button>
+      <button class="tab-btn" onclick="switchTab('register')">Đăng ký</button>
+    </div>
+    <div class="form-group"><label>Email hoặc SĐT</label><input type="text" id="loginEmail" placeholder="Nhập email hoặc số điện thoại" /></div>
+    <div class="form-group"><label>Mật khẩu</label><div class="input-pw"><input type="password" id="loginPassword" placeholder="Nhập mật khẩu" /><i class="fas fa-eye toggle-pw" onclick="togglePw('loginPassword')"></i></div></div>
+    <div id="loginError" class="form-error" style="display:none"></div>
+    <div class="form-forgot"><a href="#">Quên mật khẩu?</a></div>
+    <button class="btn-submit" onclick="login()">Đăng nhập</button>
+    <div class="form-divider"><span>hoặc đăng nhập với</span></div>
+    <div class="social-login-row">
+      <button class="btn-social-google" onclick="loginWithGoogle()"><i class="fab fa-google"></i> Google</button>
+      <button class="btn-social-fb" onclick="loginWithFacebook()"><i class="fab fa-facebook"></i> Facebook</button>
+    </div>
+  </div>
+  <div id="registerTab" style="display:none">
+    <div class="modal-logo">Thực Phẩm Xanh</div>
+    <h2 class="modal-title">Tạo tài khoản</h2>
+    <div class="tab-switcher">
+      <button class="tab-btn" onclick="switchTab('login')">Đăng nhập</button>
+      <button class="tab-btn active" onclick="switchTab('register')">Đăng ký</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Họ</label><input type="text" id="regLastName" placeholder="Họ" /></div>
+      <div class="form-group"><label>Tên</label><input type="text" id="regFirstName" placeholder="Tên" /></div>
+    </div>
+    <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="Nhập địa chỉ email" /></div>
+    <div class="form-group"><label>Số điện thoại</label><input type="tel" id="regPhone" placeholder="VD: 0901234567" /></div>
+    <div class="form-group"><label><i class="fas fa-map-marker-alt" style="color:#1a7a3c;margin-right:4px"></i>Địa chỉ giao hàng <span style="color:#e53935">*</span></label><input type="text" id="regAddress" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" /></div>
+    <div class="form-group"><label>Mật khẩu</label><div class="input-pw"><input type="password" id="regPassword" placeholder="Tối thiểu 8 ký tự" /><i class="fas fa-eye toggle-pw" onclick="togglePw('regPassword')"></i></div></div>
+    <div class="form-group"><label>Xác nhận mật khẩu</label><input type="password" id="regConfirm" placeholder="Nhập lại mật khẩu" /></div>
+    <div id="regError" class="form-error" style="display:none"></div>
+    <div class="form-check"><input type="checkbox" id="agreeTerms" /><label for="agreeTerms">Tôi đồng ý với <a href="#">Điều khoản dịch vụ</a> và <a href="#">Chính sách bảo mật</a></label></div>
+    <button class="btn-submit" onclick="register()">Tạo tài khoản</button>
+    <div class="form-divider"><span>hoặc đăng ký với</span></div>
+    <div class="social-login-row">
+      <button class="btn-social-google" onclick="loginWithGoogle()"><i class="fab fa-google"></i> Google</button>
+      <button class="btn-social-fb" onclick="loginWithFacebook()"><i class="fab fa-facebook"></i> Facebook</button>
+    </div>
+  </div>
+</div>
+
+<!-- SOCIAL LOGIN MODAL -->
+<div class="social-modal-overlay" id="socialLoginOverlay" data-provider="google">
+  <div class="social-modal">
+    <button class="btn-social-close" onclick="closeSocialLogin()"><i class="fas fa-times"></i></button>
+    <div class="social-modal-icon" id="socialLoginIcon"><i class="fab fa-google" style="color:#ea4335;font-size:32px"></i></div>
+    <h3 id="socialLoginTitle">Đăng nhập với Google</h3>
+    <p>Nhập thông tin tài khoản của bạn để tiếp tục</p>
+    <div class="form-group"><label>Tên hiển thị</label><input type="text" id="socialLoginName" placeholder="Họ và tên của bạn" /></div>
+    <div class="form-group"><label>Email</label><input type="email" id="socialLoginEmail" placeholder="email@example.com" /></div>
+    <div id="socialLoginError" class="form-error" style="display:none"></div>
+    <button class="btn-social-confirm btn-google-confirm" id="socialConfirmBtn" onclick="confirmSocialLogin()"><i class="fas fa-sign-in-alt"></i> Tiếp tục</button>
+    <p class="social-note">⚠️ Đây là mô phỏng đăng nhập mạng xã hội. Trong thực tế sẽ dùng OAuth SDK của Google/Facebook.</p>
+  </div>
+</div>
+
+<!-- ADDRESS MODAL -->
+<div class="address-modal-overlay" id="addressModalOverlay">
+  <div class="address-modal">
+    <div class="address-modal-icon"><i class="fas fa-map-marker-alt"></i></div>
+    <h3>Thêm địa chỉ giao hàng</h3>
+    <p>Bạn cần có địa chỉ giao hàng để đặt hàng. Vui lòng nhập địa chỉ của bạn bên dưới.</p>
+    <div id="addressError" class="address-error"></div>
+    <label><i class="fas fa-map-marker-alt" style="color:#1a7a3c;margin-right:4px"></i> Địa chỉ giao hàng <span style="color:#e53935">*</span></label>
+    <input type="text" id="addressInput" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố" style="margin-bottom:14px" />
+    <label><i class="fas fa-phone" style="color:#1a7a3c;margin-right:4px"></i> Số điện thoại nhận hàng <span style="color:#e53935">*</span></label>
+    <input type="tel" id="addressPhoneInput" maxlength="10" placeholder="VD: 0901234567" style="margin-bottom:0" />
+    <div class="address-modal-footer">
+      <button class="btn-skip-address" onclick="closeAddressModal()">Bỏ qua</button>
+      <button class="btn-save-address" onclick="saveAddress()"><i class="fas fa-check"></i> Lưu &amp; Đặt hàng</button>
+    </div>
+  </div>
+</div>
+
+<!-- MY ORDERS PANEL -->
+<div class="modal-overlay" id="myOrdersOverlay" onclick="closeMyOrdersModal()"></div>
+<aside class="my-orders-panel" id="myOrdersModal">
+  <div class="my-orders-header">
+    <h2><i class="fas fa-box"></i> Đơn hàng của tôi</h2>
+    <button onclick="closeMyOrdersModal()"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="my-orders-filters">
+    <button class="mo-filter-btn active" data-status="all" onclick="filterMyOrders('all')">Tất cả</button>
+    <button class="mo-filter-btn" data-status="pending" onclick="filterMyOrders('pending')">Chờ xử lý</button>
+    <button class="mo-filter-btn" data-status="processing" onclick="filterMyOrders('processing')">Đang giao</button>
+    <button class="mo-filter-btn" data-status="done" onclick="filterMyOrders('done')">Hoàn thành</button>
+    <button class="mo-filter-btn" data-status="cancelled" onclick="filterMyOrders('cancelled')">Đã hủy</button>
+  </div>
+  <div class="my-orders-list" id="myOrdersList"></div>
+</aside>
+
+<!-- ACCOUNT PANEL -->
+<div class="modal-overlay" id="accountPanelOverlay" onclick="closeAccountPanel()"></div>
+<aside id="accountPanel">
+  <div class="ap-header">
+    <h2><i class="fas fa-user-circle"></i> Thông tin tài khoản</h2>
+    <button onclick="closeAccountPanel()"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="ap-body">
+    <div class="ap-avatar-section">
+      <div class="ap-avatar-wrap">
+        <div class="ap-avatar-circle" id="apAvatarDisplay"><span>U</span></div>
+        <label class="ap-avatar-edit-btn" title="Thay ảnh đại diện">
+          <i class="fas fa-camera"></i>
+          <input type="file" accept="image/*" style="display:none" onchange="handleAccountAvatarUpload(event)">
+        </label>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="ap-avatar-name" id="apDisplayNameBig">Người dùng</div>
+        <div class="ap-avatar-email" id="apEmailDisplay">—</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <span id="apProviderBadge" class="ap-provider-badge" style="display:none"></span>
+          <div class="ap-join-info"><i class="fas fa-calendar-alt"></i> Tham gia: <span id="apJoinDate">—</span></div>
+        </div>
+        <div class="ap-avatar-actions">
+          <label class="ap-btn-outline" style="cursor:pointer">
+            <i class="fas fa-upload"></i> Tải ảnh lên
+            <input type="file" accept="image/*" style="display:none" onchange="handleAccountAvatarUpload(event)">
+          </label>
+          <button class="ap-btn-outline ap-btn-danger" onclick="removeAccountAvatar()">
+            <i class="fas fa-trash"></i> Xóa ảnh
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ap-section-card">
+      <div class="ap-section-title"><i class="fas fa-id-card"></i> Thông tin cá nhân</div>
+      <div id="apSuccessMsg" class="ap-msg"></div>
+      <div id="apErrorMsg" class="ap-msg"></div>
+      <div class="ap-form-row">
+        <div class="ap-form-group">
+          <label>Họ</label>
+          <input type="text" id="apLastName" placeholder="Họ (VD: Nguyễn)" />
+        </div>
+        <div class="ap-form-group">
+          <label>Tên</label>
+          <input type="text" id="apFirstName" placeholder="Tên (VD: Văn A)" />
+        </div>
+      </div>
+      <div class="ap-form-group">
+        <label><i class="fas fa-envelope" style="color:#1a7a3c;margin-right:4px"></i> Gmail / Email</label>
+        <div class="ap-readonly-box">
+          <span id="apEmailBox" style="word-break:break-all;font-size:14px;color:#374151">—</span>
+          <span class="ap-readonly-badge"><i class="fas fa-lock" style="font-size:9px"></i> Không đổi được</span>
+        </div>
+      </div>
+      <div class="ap-form-group">
+        <label><i class="fas fa-phone" style="color:#1a7a3c;margin-right:4px"></i> Số điện thoại</label>
+        <input type="tel" id="apPhone" placeholder="VD: 0901234567" maxlength="10" />
+      </div>
+      <div class="ap-form-group">
+        <label><i class="fas fa-map-marker-alt" style="color:#1a7a3c;margin-right:4px"></i> Địa chỉ giao hàng</label>
+        <textarea id="apAddress" rows="3" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"></textarea>
+      </div>
+      <button class="ap-btn-primary" onclick="saveAccountInfo()">
+        <i class="fas fa-save"></i> Lưu thông tin
+      </button>
+    </div>
+
+    <div class="ap-section-card">
+      <div class="ap-section-title"><i class="fas fa-lock"></i> Bảo mật</div>
+      <button class="ap-btn-secondary" id="apTogglePwBtn" onclick="togglePasswordSection()">
+        <i class="fas fa-key"></i> Đổi mật khẩu
+      </button>
+      <div id="apPasswordSection" style="display:none;margin-top:16px">
+        <div id="apPwMsg" class="ap-msg"></div>
+        <div class="ap-form-group" style="margin-top:12px">
+          <label>Mật khẩu hiện tại</label>
+          <div class="ap-pw-wrap">
+            <input type="password" id="apCurrentPw" placeholder="••••••••" />
+            <i class="fas fa-eye ap-toggle-pw" onclick="apTogglePw('apCurrentPw',this)"></i>
+          </div>
+        </div>
+        <div class="ap-form-group">
+          <label>Mật khẩu mới</label>
+          <div class="ap-pw-wrap">
+            <input type="password" id="apNewPw" placeholder="Tối thiểu 8 ký tự" />
+            <i class="fas fa-eye ap-toggle-pw" onclick="apTogglePw('apNewPw',this)"></i>
+          </div>
+        </div>
+        <div class="ap-form-group">
+          <label>Xác nhận mật khẩu mới</label>
+          <div class="ap-pw-wrap">
+            <input type="password" id="apConfirmPw" placeholder="Nhập lại mật khẩu mới" />
+            <i class="fas fa-eye ap-toggle-pw" onclick="apTogglePw('apConfirmPw',this)"></i>
+          </div>
+        </div>
+        <button class="ap-btn-primary" onclick="saveNewPassword()">
+          <i class="fas fa-check"></i> Xác nhận đổi mật khẩu
+        </button>
+      </div>
+    </div>
+    <div class="ap-spacer"></div>
+  </div>
+</aside>
+
+<!-- ADMIN PANEL -->
+<div class="modal-overlay" id="adminOverlay" onclick="closeAdminPanel()"></div>
+<div class="admin-panel" id="adminPanel">
+  <div class="admin-header">
+    <div class="admin-header-left">
+      <div class="admin-avatar-mini-wrap">
+        <div class="admin-avatar-mini">
+          <img id="adminAvatarMiniImg" src="vf9.jpg" alt="Admin" />
+          <label class="admin-avatar-mini-edit" title="Đổi ảnh đại diện">
+            <i class="fas fa-camera"></i>
+            <input type="file" accept="image/*" style="display:none" onchange="handleAdminAvatarUpload(event)" />
+          </label>
+        </div>
+        <button class="admin-avatar-mini-reset" onclick="resetAdminAvatar()" title="Khôi phục ảnh mặc định"><i class="fas fa-undo"></i></button>
+      </div>
+      <h2><i class="fas fa-shield-alt"></i> Quản trị hệ thống
+        <span class="sync-status" id="syncStatus"><i class="fas fa-circle"></i> Đồng bộ trực tiếp</span>
+      </h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="adminLogoutBtn" onclick="adminLogoutAction()" style="display:none;align-items:center;gap:7px;background:rgba(255,255,255,0.15);color:#fff;border:1.5px solid rgba(255,255,255,0.35);padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s" onmouseover="this.style.background='rgba(239,68,68,0.75)';this.style.borderColor='transparent'" onmouseout="this.style.background='rgba(255,255,255,0.15)';this.style.borderColor='rgba(255,255,255,0.35)'">
+        <i class="fas fa-sign-out-alt"></i> Đăng xuất
+      </button>
+      <button onclick="closeAdminPanel()" style="background:rgba(255,255,255,0.15);color:#fff;padding:8px 12px;border-radius:8px;font-size:16px"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+  <div id="adminLoginSection">
+    <div class="admin-login-box">
+      <div class="admin-avatar" style="width:96px;height:96px;border-radius:50%;overflow:hidden;margin:0 auto 4px;display:flex;align-items:center;justify-content:center;background:#f3f4f6">
+        <img id="adminLoginAvatarImg" src="vf9.jpg" alt="Admin" style="width:100%;height:100%;object-fit:cover" />
+      </div>
+      <h3 style="text-align:center;font-size:20px;font-weight:700;margin-bottom:24px">Đăng nhập Admin</h3>
+      <div class="form-group"><label>Tên đăng nhập</label><input type="text" id="adminUser" placeholder="admin" onkeydown="if(event.key==='Enter') adminLogin()" /></div>
+      <div class="form-group"><label>Mật khẩu</label><input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter') adminLogin()" /></div>
+      <div id="adminError" class="form-error" style="display:none"></div>
+      <button class="btn-submit" onclick="adminLogin()">Đăng nhập</button>
+    </div>
+  </div>
+  <div id="adminDashboard" style="display:none">
+    <div class="admin-stats-grid">
+      <div class="admin-stat-card green"><i class="fas fa-shopping-bag"></i><div><span class="admin-stat-num" id="statOrders">0</span><span>Tổng đơn hàng</span></div></div>
+      <div class="admin-stat-card blue"><i class="fas fa-users"></i><div><span class="admin-stat-num" id="statUsers">0</span><span>Khách hàng</span></div></div>
+      <div class="admin-stat-card orange"><i class="fas fa-dollar-sign"></i><div><span class="admin-stat-num" id="statRevenue">0</span><span>Doanh thu (đ)</span></div></div>
+      <div class="admin-stat-card red"><i class="fas fa-clock"></i><div><span class="admin-stat-num" id="statPending">0</span><span>Chờ xử lý</span></div></div>
+    </div>
+    <div class="admin-tabs">
+      <button class="admin-tab-btn active" onclick="switchAdminTab('orders')"><i class="fas fa-list"></i> Đơn hàng</button>
+      <button class="admin-tab-btn" onclick="switchAdminTab('customers')"><i class="fas fa-users"></i> Khách hàng</button>
+      <button class="admin-tab-btn" onclick="switchAdminTab('stock')"><i class="fas fa-boxes"></i> Tồn kho</button>
+      <button class="admin-tab-btn" onclick="switchAdminTab('images')"><i class="fas fa-images"></i> Quản lý ảnh</button>
+    </div>
+    <div class="admin-tab-content active" id="tab-orders">
+      <div class="admin-section">
+        <div class="admin-section-header">
+          <h3><i class="fas fa-list"></i> Danh sách đơn hàng</h3>
+          <div class="admin-filters"><select id="orderFilter" onchange="filterOrders()"><option value="all">Tất cả đơn</option><option value="pending">Chờ xử lý</option><option value="processing">Đang giao</option><option value="done">Hoàn thành</option><option value="cancelled">Đã hủy</option></select></div>
+        </div>
+        <div class="orders-table-wrap">
+          <table class="orders-table">
+            <thead><tr><th>Mã ĐH</th><th>Khách hàng</th><th>Sản phẩm</th><th>Tổng tiền</th><th>Thời gian</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+            <tbody id="ordersTableBody"></tbody>
+          </table>
+          <div id="noOrders" style="text-align:center;padding:40px;color:#999"><i class="fas fa-box-open" style="font-size:48px;color:#d1d5db;display:block;margin-bottom:8px"></i><p>Chưa có đơn hàng nào</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="admin-tab-content" id="tab-customers">
+      <div class="admin-section">
+        <h3 style="font-size:18px;font-weight:700;margin-bottom:16px"><i class="fas fa-users"></i> Danh sách khách hàng</h3>
+        <div class="orders-table-wrap">
+          <table class="orders-table">
+            <thead><tr><th>STT</th><th>Tên khách hàng</th><th>Email</th><th>SĐT</th><th style="min-width:200px">Địa chỉ giao hàng</th><th>Số đơn</th><th>Tổng chi tiêu</th></tr></thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="admin-tab-content" id="tab-stock">
+      <div class="admin-section">
+        <div class="admin-section-header" style="margin-bottom:16px">
+          <h3><i class="fas fa-boxes"></i> Quản lý tồn kho</h3>
+          <span style="font-size:12px;color:#9ca3af">Số lượng được lưu tự động</span>
+        </div>
+        <div class="stock-summary">
+          <div class="stock-summary-card"><div class="stock-summary-icon icon-out"><i class="fas fa-times-circle"></i></div><div><div class="stock-summary-num" id="stockCountOut">0</div><div class="stock-summary-label">Hết hàng</div></div></div>
+          <div class="stock-summary-card"><div class="stock-summary-icon icon-low"><i class="fas fa-exclamation-triangle"></i></div><div><div class="stock-summary-num" id="stockCountLow">0</div><div class="stock-summary-label">Sắp hết (≤10)</div></div></div>
+          <div class="stock-summary-card"><div class="stock-summary-icon icon-ok"><i class="fas fa-check-circle"></i></div><div><div class="stock-summary-num" id="stockCountOk">0</div><div class="stock-summary-label">Còn hàng</div></div></div>
+        </div>
+        <div class="stock-toolbar">
+          <input type="text" id="stockSearchInput" placeholder="Tìm sản phẩm theo tên..." oninput="renderStockManager()" />
+          <select id="stockFilterSelect" onchange="renderStockManager()"><option value="all">Tất cả trạng thái</option><option value="out">Hết hàng</option><option value="low">Sắp hết</option><option value="ok">Còn hàng</option></select>
+          <button class="btn-export-stock" onclick="exportStockCSV()"><i class="fas fa-download"></i> Xuất CSV</button>
+        </div>
+        <div class="stock-table-wrap">
+          <table class="stock-table">
+            <thead><tr><th style="width:35%">Sản phẩm</th><th style="width:12%">Xuất xứ</th><th style="width:14%">Trạng thái</th><th style="width:20%">Số lượng tồn kho</th><th style="width:19%">Thao tác nhanh</th></tr></thead>
+            <tbody id="stockTableBody"></tbody>
+          </table>
+          <div id="noStockResults" style="display:none;text-align:center;padding:40px;color:#9ca3af"><i class="fas fa-search" style="font-size:36px;display:block;margin-bottom:8px"></i><p>Không tìm thấy sản phẩm</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB QUẢN LÝ ẢNH - tích hợp Firebase -->
+    <div class="admin-tab-content" id="tab-images">
+      <div class="admin-section">
+        <div class="admin-section-header">
+          <h3><i class="fas fa-images"></i> Quản lý ảnh sản phẩm</h3>
+          <span style="font-size:12px;color:#9ca3af" id="imgSyncLabel">Đồng bộ Firebase realtime</span>
+        </div>
+
+        <!-- Thanh trạng thái Firebase -->
+        <div class="fb-status-bar connecting" id="fbStatusBar">
+          <i class="fas fa-circle-notch fa-spin"></i>
+          <span id="fbStatusText">Đang kết nối Firebase...</span>
+        </div>
+
+        <div class="img-manager-toolbar">
+          <input type="text" id="imgSearchInput" placeholder="Tìm kiếm theo tên sản phẩm..." oninput="renderImageManager()" />
+          <button class="btn-upload-new" onclick="document.getElementById('bulkFileInput').click()">
+            <i class="fas fa-upload"></i> Tải ảnh lên
+          </button>
+          <input type="file" id="bulkFileInput" multiple accept="image/*" style="display:none" onchange="handleBulkUpload(event)" />
+        </div>
+        <div class="img-grid" id="imgGrid"></div>
+        <div id="noImgProducts" style="display:none;text-align:center;padding:40px;color:#999">
+          <i class="fas fa-image" style="font-size:48px;color:#d1d5db;display:block;margin-bottom:8px"></i>
+          <p>Không tìm thấy sản phẩm</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ASSIGN MODAL -->
+<div class="assign-modal-overlay" id="assignModalOverlay">
+  <div class="assign-modal">
+    <h3><i class="fas fa-link"></i> Gán ảnh cho sản phẩm</h3>
+    <img id="assignPreviewImg" class="assign-modal-img" src="" alt="preview" />
+    <label>Chọn sản phẩm cần gán</label>
+    <select id="assignProductSelect"></select>
+    <div class="assign-modal-footer">
+      <button class="btn-cancel-modal" onclick="closeAssignModal()">Bỏ qua</button>
+      <button class="btn-confirm-modal" onclick="confirmAssign()"><i class="fas fa-check"></i> Gán ảnh</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGOUT CONFIRM BAR -->
+<div class="logout-confirm-bar" id="logoutConfirmBar">
+  <div style="width:38px;height:38px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+    <i class="fas fa-sign-out-alt" style="color:#dc2626;font-size:16px"></i>
+  </div>
+  <p>Bạn muốn đăng xuất?<small>Giỏ hàng sẽ được giữ lại khi bạn đăng nhập lại.</small></p>
+  <button class="btn-logout-no" onclick="hideLogoutConfirm()">Hủy</button>
+  <button class="btn-logout-yes" onclick="confirmUserLogout()"><i class="fas fa-check"></i> Đăng xuất</button>
+</div>
+
+<!-- PROMO POPUP -->
+<div class="promo-popup-overlay" id="promoPopupOverlay">
+  <div class="promo-popup">
+    <button class="promo-popup-close" onclick="closePromoPopup()"><i class="fas fa-times"></i></button>
+    <div class="promo-popup-header">
+      <span class="promo-popup-flash-tag"><i class="fas fa-bolt"></i> FLASH SALE HÔM NAY</span>
+      <h2>Giảm đến 40% cho rau củ &amp; trái cây tươi</h2>
+      <p>Hàng trăm sản phẩm sạch, nguồn gốc rõ ràng, ưu đãi chỉ trong thời gian giới hạn.</p>
+      <div class="promo-popup-countdown" id="promoPopupCountdown">
+        <div><span id="promoH">05</span><span>Giờ</span></div>
+        <div><span id="promoM">30</span><span>Phút</span></div>
+        <div><span id="promoS">00</span><span>Giây</span></div>
+      </div>
+    </div>
+    <div class="promo-popup-body">
+      <div class="promo-popup-products" id="promoPopupProducts"></div>
+      <div class="promo-popup-perks">
+        <div><i class="fas fa-truck"></i>Freeship từ 299K</div>
+        <div><i class="fas fa-leaf"></i>100% hữu cơ</div>
+        <div><i class="fas fa-undo"></i>Đổi trả dễ dàng</div>
+      </div>
+    </div>
+    <div class="promo-popup-footer">
+      <button class="btn-promo-cta" onclick="goToFlashSaleFromPopup()"><i class="fas fa-bolt"></i> Mua ngay - Săn Flash Sale</button>
+      <button class="btn-promo-later" onclick="closePromoPopup()">Để sau, tiếp tục xem hàng</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="footer-logo">Thực Phẩm Xanh</div>
+        <p>Chuỗi cung ứng thực phẩm sạch từ nông trại đến bàn ăn. Cam kết 100% tự nhiên, không hóa chất.</p>
+        <div class="footer-social">
+          <a href="#"><i class="fab fa-facebook"></i></a>
+          <a href="#"><i class="fab fa-instagram"></i></a>
+          <a href="#"><i class="fab fa-youtube"></i></a>
+          <a href="#"><i class="fab fa-tiktok"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Danh mục</h4>
+        <ul><li><a href="#">Rau củ hữu cơ</a></li><li><a href="#">Trái cây tươi</a></li><li><a href="#">Thịt sạch</a></li><li><a href="#">Hải sản tươi</a></li><li><a href="#">Trứng &amp; Sữa</a></li></ul>
+      </div>
+      <div class="footer-col">
+        <h4>Hỗ trợ</h4>
+        <ul><li><a href="#">Chính sách đổi trả</a></li><li><a href="#">Hướng dẫn mua hàng</a></li><li><a href="#">Chính sách giao hàng</a></li><li><a href="#">Câu hỏi thường gặp</a></li></ul>
+      </div>
+      <div class="footer-col">
+        <h4>Liên hệ</h4>
+        <p><i class="fas fa-map-marker-alt"></i> 123 Đường Xanh, Q.1, TP.HCM</p>
+        <p><i class="fas fa-phone"></i> 1800 6789 (Miễn phí)</p>
+        <p><i class="fas fa-envelope"></i> support@thucphamxanh.vn</p>
+        <p><i class="fas fa-clock"></i> 7:00 - 22:00 mỗi ngày</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Thực Phẩm Xanh. Bảo lưu mọi bản quyền.</p>
+      <div class="footer-pay"><span>Visa</span><span>MasterCard</span><span>MoMo</span><span>Chuyển khoản</span></div>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+
+<script>
+// =============================================================
+// ===== FIREBASE CONFIGURATION =====
+// =============================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA_pFUEDmgLK71lArgTzdMfM7rnU743nx4",
+  authDomain: "thucphamxanh-cd3d3.firebaseapp.com",
+  projectId: "thucphamxanh-cd3d3",
+  storageBucket: "thucphamxanh-cd3d3.firebasestorage.app",
+  messagingSenderId: "439289602255",
+  appId: "1:439289602255:web:181b0f9806abb15f9997ba"
+};
+// =============================================================
+
+// ===== FIREBASE INIT & STATE =====
+let _fbApp = null, _fbStorage = null, _fbDb = null;
+let _fbReady = false, _fbListenerActive = false, _fbAdminAvatarListenerActive = false;
+const FIRESTORE_COLLECTION = 'productImages'; // tên collection trong Firestore
+const IMG_STORE_KEY = 'customProductImages';   // fallback localStorage key
+const FIRESTORE_SETTINGS_COLLECTION = 'siteSettings'; // collection cho các cài đặt chung
+const ADMIN_AVATAR_DOC_ID = 'adminAvatar'; // doc chứa ảnh đại diện admin
+
+function initFirebase() {
+  try {
+    if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+      setFbStatus('local', '<i class="fas fa-database"></i> Chế độ LocalStorage (chưa cấu hình Firebase)');
+      return;
+    }
+    if (!firebase.apps.length) {
+      _fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+    } else {
+      _fbApp = firebase.app();
+    }
+    _fbStorage = firebase.storage(_fbApp);
+    _fbDb = firebase.firestore(_fbApp);
+    _fbReady = true;
+    setFbStatus('connected', '<i class="fas fa-circle"></i> Firebase đã kết nối – đồng bộ realtime mọi thiết bị');
+    startFirestoreListener();
+    startAdminAvatarListener();
+  } catch (err) {
+    console.warn('[Firebase] Lỗi khởi tạo:', err);
+    setFbStatus('error', '<i class="fas fa-exclamation-triangle"></i> Lỗi Firebase – dùng LocalStorage dự phòng');
+  }
+}
+
+function setFbStatus(type, html) {
+  const bar = document.getElementById('fbStatusBar');
+  const txt = document.getElementById('fbStatusText');
+  if (!bar) return;
+  bar.className = 'fb-status-bar ' + type;
+  if (txt) txt.innerHTML = html;
+}
+
+// ===== FIRESTORE REALTIME LISTENER =====
+function startFirestoreListener() {
+  if (!_fbDb || _fbListenerActive) return;
+  _fbListenerActive = true;
+  _fbDb.collection(FIRESTORE_COLLECTION)
+    .onSnapshot(snapshot => {
+      const map = loadSavedImagesLocal(); // start with localStorage
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        if (d.productId && d.url) map[d.productId] = d.url;
+      });
+      // Merge vào localStorage cache
+      try { localStorage.setItem(IMG_STORE_KEY, JSON.stringify(map)); } catch(e) {}
+      applyStoredImages();
+      if (document.getElementById('tab-images')?.classList.contains('active')) {
+        renderImageManager();
+      }
+    }, err => {
+      console.warn('[Firestore] listener error:', err);
+      setFbStatus('error', '<i class="fas fa-exclamation-triangle"></i> Mất kết nối Firestore – dùng LocalStorage');
+    });
+}
+
+// ===== FIRESTORE REALTIME LISTENER CHO ẢNH ĐẠI DIỆN ADMIN =====
+// Đồng bộ ảnh đại diện admin giữa mọi thiết bị/trình duyệt đăng nhập admin
+function startAdminAvatarListener() {
+  if (!_fbDb || _fbAdminAvatarListenerActive) return;
+  _fbAdminAvatarListenerActive = true;
+  _fbDb.collection(FIRESTORE_SETTINGS_COLLECTION).doc(ADMIN_AVATAR_DOC_ID)
+    .onSnapshot(doc => {
+      const data = doc.exists ? doc.data() : null;
+      if (data && data.url) {
+        try { localStorage.setItem(ADMIN_AVATAR_KEY, data.url); } catch(e) {}
+      } else {
+        try { localStorage.removeItem(ADMIN_AVATAR_KEY); } catch(e) {}
+      }
+      if (typeof applyAdminAvatar === 'function') applyAdminAvatar();
+    }, err => {
+      console.warn('[Firestore] admin avatar listener error:', err);
+    });
+}
+
+// ===== IMAGE STORAGE HELPERS =====
+// Load từ localStorage (fallback & cache)
+function loadSavedImagesLocal() {
+  try { return JSON.parse(localStorage.getItem(IMG_STORE_KEY)) || {}; } catch(e) { return {}; }
+}
+
+// Load ảnh: nếu Firebase sẵn sàng → dùng cache (listener đã merge), nếu không → localStorage
+function loadSavedImages() {
+  return loadSavedImagesLocal();
+}
+
+// Lưu: vừa cập nhật localStorage, vừa ghi lên Firestore (nếu có Firebase)
+function saveImages(map) {
+  try { localStorage.setItem(IMG_STORE_KEY, JSON.stringify(map)); } catch(e) {}
+  if (typeof saveCustomImages === 'function') saveCustomImages(map);
+  // Ghi lên Firestore
+  if (_fbReady && _fbDb) {
+    Object.entries(map).forEach(([productId, url]) => {
+      _fbDb.collection(FIRESTORE_COLLECTION).doc(productId).set({
+        productId, url, updatedAt: Date.now()
+      }).catch(err => console.warn('[Firestore] write error:', err));
+    });
+  }
+}
+
+// Xóa ảnh một sản phẩm khỏi Firestore
+function deleteImageFromFirestore(productId) {
+  if (_fbReady && _fbDb) {
+    _fbDb.collection(FIRESTORE_COLLECTION).doc(productId).delete()
+      .catch(err => console.warn('[Firestore] delete error:', err));
+  }
+}
+
+function applyStoredImages() {
+  const map = loadSavedImages();
+  document.querySelectorAll('.product-img[data-product-id]').forEach(img => {
+    const pid = img.dataset.productId;
+    if (map[pid]) img.src = map[pid];
+  });
+}
+
+function tpxSyncSafe(type, payload) {
+  if (typeof tpxBroadcast === 'function') tpxBroadcast(type, payload);
+}
+
+// ===== UPLOAD ẢNH LÊN FIREBASE STORAGE (nếu có) hoặc lưu dataURL =====
+async function uploadImageForProduct(productId, file) {
+  if (_fbReady && _fbStorage) {
+    // Upload lên Firebase Storage → lấy download URL → lưu Firestore
+    const path = `productImages/${productId}_${Date.now()}_${file.name}`;
+    const ref = _fbStorage.ref(path);
+    showToast('Đang tải ảnh lên Firebase...', '');
+    const snapshot = await ref.put(file);
+    const url = await snapshot.ref.getDownloadURL();
+    // Lưu Firestore (listener sẽ tự cập nhật toàn bộ thiết bị)
+    await _fbDb.collection(FIRESTORE_COLLECTION).doc(productId).set({
+      productId, url, updatedAt: Date.now()
+    });
+    // Cập nhật localStorage cache
+    const map = loadSavedImagesLocal();
+    map[productId] = url;
+    try { localStorage.setItem(IMG_STORE_KEY, JSON.stringify(map)); } catch(e) {}
+    document.querySelectorAll(`.product-img[data-product-id="${productId}"]`).forEach(img => img.src = url);
+    tpxSyncSafe('image', { id: productId, source: 'firebase' });
+    showToast('Tải lên Firebase thành công ☁️');
+    renderImageManager();
+    return url;
+  } else {
+    // Fallback: lưu dataURL vào localStorage
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const dataUrl = ev.target.result;
+        const map = loadSavedImages();
+        map[productId] = dataUrl;
+        saveImages(map);
+        document.querySelectorAll(`.product-img[data-product-id="${productId}"]`).forEach(img => img.src = dataUrl);
+        tpxSyncSafe('image', { id: productId, source: 'local' });
+        showToast('Cập nhật ảnh thành công (LocalStorage)');
+        renderImageManager();
+        resolve(dataUrl);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
+// ===== IMAGE MANAGER RENDER =====
+function renderImageManager() {
+  const query = (document.getElementById('imgSearchInput')?.value || '').toLowerCase();
+  const grid = document.getElementById('imgGrid');
+  const noEl = document.getElementById('noImgProducts');
+  if (!grid) return;
+  const products = window.products || [];
+  const map = loadSavedImages();
+  const filtered = products.filter(p => !query || (p.name || '').toLowerCase().includes(query));
+  if (!filtered.length) {
+    grid.innerHTML = '';
+    if (noEl) noEl.style.display = 'block';
+    return;
+  }
+  if (noEl) noEl.style.display = 'none';
+  grid.innerHTML = filtered.map(p => {
+    const customSrc = map[p.id];
+    const displaySrc = customSrc || p.image || '';
+    const hasCustom = !!customSrc;
+    const isFirebase = hasCustom && customSrc.startsWith('https://');
+    return `
+      <div class="img-card">
+        ${hasCustom ? `<span class="img-card-badge">Đã tuỳ chỉnh</span>` : ''}
+        ${isFirebase ? `<span class="img-card-badge-fb"><i class="fas fa-cloud"></i> Firebase</span>` : ''}
+        ${displaySrc
+          ? `<img class="img-card-thumb" src="${displaySrc}" alt="${p.name}"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>`
+          : ''}
+        <div class="img-card-thumb-placeholder" style="${displaySrc ? 'display:none' : ''}">
+          <i class="fas fa-image"></i>
+        </div>
+        <div class="img-card-body">
+          <div class="img-card-name" title="${p.name}">${p.name}</div>
+          <div class="img-card-meta">
+            ID: ${p.id}
+            ${hasCustom ? (isFirebase ? ' · ☁️ Firebase Storage' : ' · 💾 LocalStorage') : ' · Ảnh mặc định'}
+          </div>
+        </div>
+        <div class="img-card-actions">
+          <label class="btn-assign-img" style="display:flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;flex:1;padding:5px 0;font-size:12px;border-radius:6px">
+            <i class="fas fa-upload"></i> Thay ảnh
+            <input type="file" accept="image/*" style="display:none"
+              onchange="handleManagerImgChange(event,'${p.id}')"/>
+          </label>
+          ${hasCustom ? `<button class="btn-delete-img" onclick="resetProductImageLocal('${p.id}','${p.image || ''}')">
+            <i class="fas fa-undo"></i> Mặc định</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ===== HANDLERS =====
+async function handleManagerImgChange(e, productId) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { showToast('Ảnh vượt quá 5MB'); return; }
+  e.target.value = '';
+  try {
+    await uploadImageForProduct(productId, file);
+  } catch (err) {
+    console.error('[upload]', err);
+    showToast('Lỗi khi tải ảnh lên');
+  }
+}
+
+async function resetProductImageLocal(productId, defaultSrc) {
+  const map = loadSavedImages();
+  delete map[productId];
+  try { localStorage.setItem(IMG_STORE_KEY, JSON.stringify(map)); } catch(e) {}
+  if (typeof saveCustomImages === 'function') saveCustomImages(map);
+  deleteImageFromFirestore(productId);
+  document.querySelectorAll(`.product-img[data-product-id="${productId}"]`).forEach(img => img.src = defaultSrc || '');
+  tpxSyncSafe('image', { id: productId, source: 'manager' });
+  showToast('Đã khôi phục ảnh mặc định');
+  renderImageManager();
+}
+
+// ===== BULK UPLOAD =====
+let _bulkQueue = [], _bulkIdx = 0;
+function handleBulkUpload(e) {
+  const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/') && f.size <= 5 * 1024 * 1024);
+  if (!files.length) { showToast('Không có file hợp lệ (tối đa 5MB/ảnh)'); return; }
+  _bulkQueue = [];
+  _bulkIdx = 0;
+  let loaded = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      _bulkQueue.push({ file, src: ev.target.result });
+      if (++loaded === files.length) openAssignModal(0);
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+function openAssignModal(idx) {
+  if (idx >= _bulkQueue.length) {
+    closeAssignModal();
+    renderImageManager();
+    showToast(`Đã xử lý ${_bulkQueue.length} ảnh`);
+    return;
+  }
+  _bulkIdx = idx;
+  document.getElementById('assignPreviewImg').src = _bulkQueue[idx].src;
+  const sel = document.getElementById('assignProductSelect');
+  sel.innerHTML = '<option value="">-- Chọn sản phẩm --</option>';
+  (window.products || []).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  document.getElementById('assignModalOverlay').classList.add('open');
+}
+function closeAssignModal() {
+  document.getElementById('assignModalOverlay').classList.remove('open');
+}
+async function confirmAssign() {
+  const pid = document.getElementById('assignProductSelect').value;
+  closeAssignModal();
+  if (pid) {
+    try {
+      await uploadImageForProduct(pid, _bulkQueue[_bulkIdx].file);
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi tải ảnh');
+    }
+  }
+  setTimeout(() => openAssignModal(_bulkIdx + 1), 300);
+}
+
+// ===== ADMIN SESSION =====
+(function restoreAdminSession() {
+  if (sessionStorage.getItem('adminLoggedIn') === '1') {
+    document.body.classList.add('is-admin');
+    document.addEventListener('DOMContentLoaded', () => {
+      const logoutBtn = document.getElementById('adminLogoutBtn');
+      if (logoutBtn) logoutBtn.style.display = 'flex';
+    });
+  }
+})();
+
+const _origAdminLogin = window.adminLogin;
+window.adminLogin = function() {
+  if (typeof _origAdminLogin === 'function') {
+    _origAdminLogin();
+    setTimeout(() => {
+      if (document.getElementById('adminDashboard')?.style.display !== 'none') {
+        document.body.classList.add('is-admin');
+        sessionStorage.setItem('adminLoggedIn', '1');
+        const logoutBtn = document.getElementById('adminLogoutBtn');
+        if (logoutBtn) logoutBtn.style.display = 'flex';
+      }
+    }, 100);
+  }
+};
+
+const _origShowAdminPanel = window.showAdminPanel;
+window.showAdminPanel = function() {
+  if (typeof _origShowAdminPanel === 'function') _origShowAdminPanel();
+  if (typeof applyAdminAvatar === 'function') applyAdminAvatar();
+};
+
+function adminLogoutAction() {
+  if (!confirm('Bạn có chắc muốn đăng xuất khỏi Admin?')) return;
+  if (typeof adminLogout === 'function') adminLogout();
+  const loginSec = document.getElementById('adminLoginSection');
+  const dashSec = document.getElementById('adminDashboard');
+  if (loginSec) loginSec.style.display = 'block';
+  if (dashSec) dashSec.style.display = 'none';
+  const logoutBtn = document.getElementById('adminLogoutBtn');
+  if (logoutBtn) logoutBtn.style.display = 'none';
+  document.body.classList.remove('is-admin');
+  sessionStorage.removeItem('adminLoggedIn');
+  const userInput = document.getElementById('adminUser');
+  const passInput = document.getElementById('adminPass');
+  if (userInput) userInput.value = '';
+  if (passInput) passInput.value = '';
+  showToast('Đã đăng xuất khỏi Admin', '');
+}
+
+function switchAdminTab(tab) {
+  const tabs = ['orders', 'customers', 'stock', 'images'];
+  document.querySelectorAll('.admin-tab-btn').forEach((b, i) => b.classList.toggle('active', tabs[i] === tab));
+  tabs.forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+  if (tab === 'images') renderImageManager();
+  if (tab === 'stock') renderStockManager();
+}
+
+// ===== MutationObserver để áp ảnh khi grid render =====
+const _observer = new MutationObserver(() => applyStoredImages());
+document.addEventListener('DOMContentLoaded', () => {
+  _observer.observe(document.getElementById('productsGrid') || document.body, { childList: true, subtree: true });
+  const fsGrid = document.getElementById('flashSaleGrid');
+  if (fsGrid) _observer.observe(fsGrid, { childList: true, subtree: true });
+  applyStoredImages();
+  restoreUserSession();
+  initFirebase(); // ← Khởi động Firebase
+});
+
+// BroadcastChannel: lắng nghe ảnh thay đổi từ tab khác
+if (window.tpxChannel) {
+  const _prevOnMsg = window.tpxChannel.onmessage;
+  window.tpxChannel.onmessage = function(e) {
+    if (typeof _prevOnMsg === 'function') _prevOnMsg(e);
+    if (e.data && e.data.type === 'image') {
+      applyStoredImages();
+      if (document.getElementById('tab-images')?.classList.contains('active')) renderImageManager();
+    }
+  };
+}
+window.addEventListener('storage', function(e) {
+  if (e.key === IMG_STORE_KEY) {
+    applyStoredImages();
+    if (document.getElementById('tab-images')?.classList.contains('active')) renderImageManager();
+  }
+});
+
+// ===== USER MENU =====
+function updateUserMenuUI(user) {
+  if (!user || !user.name) {
+    document.getElementById('authBtn').style.display = 'flex';
+    document.getElementById('userMenuBtn').style.display = 'none';
+    document.getElementById('userDropdown').classList.remove('open');
+    if (typeof refreshMyOrdersBadge === 'function') refreshMyOrdersBadge();
+    return;
+  }
+  document.getElementById('authBtn').style.display = 'none';
+  document.getElementById('userMenuBtn').style.display = 'flex';
+  document.getElementById('userDisplayName').textContent = user.name.split(' ').pop();
+  const initial = (user.name || '?')[0].toUpperCase();
+  document.getElementById('dropdownName').textContent = user.name;
+  document.getElementById('dropdownEmail').textContent = user.email || '';
+  const savedAvatar = localStorage.getItem('tpx_user_avatar_' + (user.email || ''));
+  const ddAvEl = document.getElementById('dropdownAvatar');
+  if (ddAvEl) {
+    if (savedAvatar) {
+      ddAvEl.innerHTML = `<img src="${savedAvatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+      ddAvEl.style.padding = '0';
+    } else {
+      ddAvEl.textContent = initial;
+      ddAvEl.style.padding = '';
+    }
+  }
+  try { localStorage.setItem('tpx_user_session', JSON.stringify(user)); } catch(e) {}
+  if (typeof refreshMyOrdersBadge === 'function') refreshMyOrdersBadge();
+}
+function restoreUserSession() {
+  try {
+    const saved = localStorage.getItem('tpx_user_session');
+    if (saved) {
+      const user = JSON.parse(saved);
+      if (user && user.name) updateUserMenuUI(user);
+    }
+  } catch(e) {}
+}
+function toggleUserDropdown(e) {
+  e && e.stopPropagation();
+  const dd = document.getElementById('userDropdown');
+  const caret = document.getElementById('userCaret');
+  const isOpen = dd.classList.contains('open');
+  dd.classList.toggle('open', !isOpen);
+  if (caret) caret.style.transform = !isOpen ? 'rotate(180deg)' : '';
+}
+function closeUserDropdown() {
+  document.getElementById('userDropdown').classList.remove('open');
+  const caret = document.getElementById('userCaret');
+  if (caret) caret.style.transform = '';
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('userMenuWrap');
+  if (wrap && !wrap.contains(e.target)) closeUserDropdown();
+});
+function showLogoutConfirm() { document.getElementById('logoutConfirmBar').classList.add('open'); }
+function hideLogoutConfirm() { document.getElementById('logoutConfirmBar').classList.remove('open'); }
+function confirmUserLogout() {
+  hideLogoutConfirm();
+  try { localStorage.removeItem('tpx_user_session'); } catch(e) {}
+  if (typeof logout === 'function') logout();
+  updateUserMenuUI(null);
+  showToast('Đã đăng xuất thành công', '');
+}
+
+window.addEventListener('load', function() {
+  const _origLogin = window.login;
+  if (typeof _origLogin === 'function') {
+    window.login = function() { _origLogin.apply(this, arguments); setTimeout(_detectAndSyncUser, 300); };
+  }
+  const _origRegister = window.register;
+  if (typeof _origRegister === 'function') {
+    window.register = function() { _origRegister.apply(this, arguments); setTimeout(_detectAndSyncUser, 300); };
+  }
+  const _origSocial = window.confirmSocialLogin;
+  if (typeof _origSocial === 'function') {
+    window.confirmSocialLogin = function() { _origSocial.apply(this, arguments); setTimeout(_detectAndSyncUser, 400); };
+  }
+  setTimeout(_detectAndSyncUser, 500);
+});
+
+function _detectAndSyncUser() {
+  let user = window.currentUser || null;
+  if (!user) {
+    const keys = ['currentUser', 'tpx_current_user', 'user', 'loggedUser'];
+    for (const k of keys) {
+      try { const raw = localStorage.getItem(k); if (raw) { user = JSON.parse(raw); break; } } catch(e) {}
+    }
+  }
+  if (!user) {
+    const label = document.getElementById('authLabel');
+    if (label && label.textContent && label.textContent !== 'Đăng nhập')
+      user = { name: label.textContent.trim(), email: '' };
+  }
+  if (user && user.name && user.name !== 'Đăng nhập') updateUserMenuUI(user);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const statusEl = document.getElementById('syncStatus');
+  if (!statusEl) return;
+  if (!('BroadcastChannel' in window)) {
+    statusEl.classList.add('offline');
+    statusEl.innerHTML = '<i class="fas fa-circle"></i> Đồng bộ qua localStorage';
+  }
+});
+
+window.updateUserMenuUI = updateUserMenuUI;
+
+// ===== ADMIN AVATAR =====
+// Ưu tiên đồng bộ qua Firebase Firestore (mọi thiết bị/trình duyệt đăng nhập admin sẽ thấy cùng ảnh).
+// Nếu Firebase chưa sẵn sàng, dùng localStorage làm phương án dự phòng (chỉ đồng bộ trên cùng trình duyệt).
+const ADMIN_AVATAR_KEY = 'tpx_admin_avatar', DEFAULT_ADMIN_AVATAR = 'vf9.jpg';
+function getAdminAvatar() {
+  try { return localStorage.getItem(ADMIN_AVATAR_KEY) || DEFAULT_ADMIN_AVATAR; } catch(e) { return DEFAULT_ADMIN_AVATAR; }
+}
+function applyAdminAvatar() {
+  const src = getAdminAvatar();
+  const loginImg = document.getElementById('adminLoginAvatarImg');
+  const miniImg = document.getElementById('adminAvatarMiniImg');
+  if (loginImg) loginImg.src = src;
+  if (miniImg) miniImg.src = src;
+}
+async function handleAdminAvatarUpload(e) {
+  if (!isAdminLoggedIn) { showToast('Chỉ admin mới có thể đổi ảnh!', 'red'); e.target.value = ''; return; }
+  const file = e.target.files[0]; if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Vui lòng chọn file ảnh hợp lệ', 'red'); e.target.value = ''; return; }
+  if (file.size > 3 * 1024 * 1024) { showToast('Ảnh quá lớn, vui lòng chọn ảnh dưới 3MB', 'red'); e.target.value = ''; return; }
+  e.target.value = '';
+
+  if (_fbReady && _fbStorage && _fbDb) {
+    // Tải lên Firebase Storage rồi lưu URL vào Firestore để đồng bộ mọi thiết bị
+    try {
+      showToast('Đang tải ảnh đại diện admin lên Firebase...', '');
+      const path = `siteSettings/adminAvatar_${Date.now()}_${file.name}`;
+      const ref = _fbStorage.ref(path);
+      const snapshot = await ref.put(file);
+      const url = await snapshot.ref.getDownloadURL();
+      await _fbDb.collection(FIRESTORE_SETTINGS_COLLECTION).doc(ADMIN_AVATAR_DOC_ID).set({
+        url, updatedAt: Date.now()
+      });
+      try { localStorage.setItem(ADMIN_AVATAR_KEY, url); } catch(err) {}
+      applyAdminAvatar();
+      showToast('Đã cập nhật ảnh đại diện Admin – đồng bộ mọi thiết bị ☁️', 'green');
+    } catch (err) {
+      console.warn('[Firebase] Lỗi tải ảnh đại diện admin:', err);
+      showToast('Lỗi tải ảnh lên Firebase, đã lưu tạm trên trình duyệt này', 'red');
+      _saveAdminAvatarLocalOnly(file);
+    }
+  } else {
+    // Fallback: chỉ lưu trên trình duyệt hiện tại (không đồng bộ được thiết bị khác)
+    _saveAdminAvatarLocalOnly(file);
+  }
+}
+function _saveAdminAvatarLocalOnly(file) {
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try { localStorage.setItem(ADMIN_AVATAR_KEY, ev.target.result); }
+    catch(err) { showToast('Không thể lưu ảnh (dung lượng quá lớn)', 'red'); return; }
+    applyAdminAvatar();
+    tpxSyncSafe('admin_avatar', {});
+    showToast('Đã cập nhật ảnh đại diện Admin (chỉ trên trình duyệt này)', 'green');
+  };
+  reader.readAsDataURL(file);
+}
+async function resetAdminAvatar() {
+  if (!isAdminLoggedIn) { showToast('Chỉ admin mới có thể đổi ảnh!', 'red'); return; }
+  try { localStorage.removeItem(ADMIN_AVATAR_KEY); } catch(e) {}
+  if (_fbReady && _fbDb) {
+    try { await _fbDb.collection(FIRESTORE_SETTINGS_COLLECTION).doc(ADMIN_AVATAR_DOC_ID).delete(); }
+    catch(err) { console.warn('[Firestore] Lỗi xóa ảnh đại diện admin:', err); }
+  }
+  applyAdminAvatar();
+  tpxSyncSafe('admin_avatar', {});
+  showToast('Đã khôi phục ảnh đại diện mặc định', '');
+}
+document.addEventListener('DOMContentLoaded', applyAdminAvatar);
+if (window.tpxChannel) {
+  const _prevAdminAvatarMsg = window.tpxChannel.onmessage;
+  window.tpxChannel.onmessage = function(e) {
+    if (typeof _prevAdminAvatarMsg === 'function') _prevAdminAvatarMsg(e);
+    if (e.data && e.data.type === 'admin_avatar') applyAdminAvatar();
+  };
+}
+window.addEventListener('storage', function(e) {
+  if (e.key === ADMIN_AVATAR_KEY) applyAdminAvatar();
+});
+
+// ===== MY ORDERS =====
+let myOrdersFilterStatus = 'all';
+const MO_STEPS = ['pending', 'processing', 'done'];
+const MO_STEP_LABELS = { pending: 'Chờ xác nhận', processing: 'Đang giao', done: 'Hoàn thành' };
+const MO_STATUS_LABEL = { pending: 'Chờ xử lý', processing: 'Đang giao', done: 'Hoàn thành', cancelled: 'Đã hủy' };
+const MO_STATUS_CLASS = { pending: 'status-pending', processing: 'status-processing', done: 'status-done', cancelled: 'status-cancelled' };
+
+function getMyOrdersList() {
+  if (!currentUser) return [];
+  try { orders = JSON.parse(localStorage.getItem('orders') || '[]'); } catch(e) {}
+  return orders.filter(o => o.userId === currentUser.email).slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+}
+function openMyOrdersModal() {
+  if (!currentUser) { showToast('Vui lòng đăng nhập để xem đơn hàng của bạn', 'red'); showAuthModal('login'); return; }
+  myOrdersFilterStatus = 'all';
+  document.querySelectorAll('.mo-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.status === 'all'));
+  document.getElementById('myOrdersOverlay').classList.add('active');
+  document.getElementById('myOrdersModal').classList.add('open');
+  renderMyOrders();
+}
+function closeMyOrdersModal() {
+  document.getElementById('myOrdersOverlay').classList.remove('active');
+  document.getElementById('myOrdersModal').classList.remove('open');
+}
+function filterMyOrders(status) {
+  myOrdersFilterStatus = status;
+  document.querySelectorAll('.mo-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.status === status));
+  renderMyOrders();
+}
+function moOrderCardHtml(o) {
+  const itemsHtml = o.items.map(it =>
+    `<div class="mo-item-row"><span class="mo-item-name">${it.name} <span class="mo-item-qty">x${it.qty}</span></span><span class="mo-item-price">${formatPrice(it.price * it.qty)}</span></div>`
+  ).join('');
+  let stepperHtml;
+  if (o.status === 'cancelled') {
+    stepperHtml = `<div class="mo-cancelled-note"><i class="fas fa-times-circle"></i> Đơn hàng đã bị hủy</div>`;
+  } else {
+    const curIdx = MO_STEPS.indexOf(o.status);
+    stepperHtml = '<div class="mo-stepper">' + MO_STEPS.map((s, i) => {
+      const stateClass = i < curIdx ? 'done' : (i === curIdx ? 'current' : '');
+      const dotIcon = i < curIdx ? '<i class="fas fa-check"></i>' : (i === curIdx ? '<i class="fas fa-circle" style="font-size:7px"></i>' : '');
+      const line = i < MO_STEPS.length - 1 ? `<div class="mo-step-line ${i < curIdx ? 'done' : ''}"></div>` : '';
+      return `<div class="mo-step ${stateClass}"><div class="mo-step-dot">${dotIcon}</div><span>${MO_STEP_LABELS[s]}</span></div>${line}`;
+    }).join('') + '</div>';
+  }
+  return `<div class="mo-card">
+    <div class="mo-card-head">
+      <div><span class="mo-order-id">Mã đơn: ${o.id}</span><span class="mo-order-time"><i class="fas fa-clock"></i> ${o.time}</span></div>
+      <span class="status-badge ${MO_STATUS_CLASS[o.status]}">${MO_STATUS_LABEL[o.status]}</span>
+    </div>
+    ${stepperHtml}
+    <div class="mo-items">${itemsHtml}</div>
+    <div class="mo-card-foot">
+      <span class="mo-card-foot-addr"><i class="fas fa-map-marker-alt"></i> Giao tới: <strong>${o.address || 'Chưa cập nhật'}</strong></span>
+      <span class="mo-total">${formatPrice(o.total)}</span>
+    </div>
+  </div>`;
+}
+function renderMyOrders() {
+  const listEl = document.getElementById('myOrdersList');
+  if (!listEl) return;
+  let list = getMyOrdersList();
+  if (myOrdersFilterStatus !== 'all') list = list.filter(o => o.status === myOrdersFilterStatus);
+  if (!list.length) {
+    listEl.innerHTML = `<div class="mo-empty"><i class="fas fa-box-open"></i><p>Chưa có đơn hàng nào${myOrdersFilterStatus !== 'all' ? ' ở trạng thái này' : ''}</p><small>Đơn hàng của bạn sẽ xuất hiện ở đây ngay sau khi đặt</small></div>`;
+    return;
+  }
+  listEl.innerHTML = list.map(moOrderCardHtml).join('');
+}
+function refreshMyOrdersBadge() {
+  const badge = document.getElementById('moActiveBadge');
+  if (!badge) return;
+  const activeCount = getMyOrdersList().filter(o => o.status === 'pending' || o.status === 'processing').length;
+  badge.style.display = activeCount > 0 ? 'block' : 'none';
+}
+
+const _origTpxHandleSyncMessage = window.tpxHandleSyncMessage;
+if (typeof _origTpxHandleSyncMessage === 'function') {
+  window.tpxHandleSyncMessage = function(msg) {
+    _origTpxHandleSyncMessage(msg);
+    if (msg && msg.type === 'orders') {
+      if (document.getElementById('myOrdersModal')?.classList.contains('open')) renderMyOrders();
+      refreshMyOrdersBadge();
+    }
+  };
+}
+document.addEventListener('DOMContentLoaded', () => { refreshMyOrdersBadge(); });
+window.addEventListener('load', function() {
+  const _origCheckout = window.checkout;
+  if (typeof _origCheckout === 'function') {
+    window.checkout = function() {
+      _origCheckout.apply(this, arguments);
+      refreshMyOrdersBadge();
+      if (document.getElementById('myOrdersModal')?.classList.contains('open')) renderMyOrders();
+    };
+  }
+});
+
+// ===== PROMO POPUP =====
+const PROMO_POPUP_DELAY = 1800, PROMO_POPUP_SEEN_KEY = 'tpx_promo_popup_seen';
+function renderPromoPopupProducts() {
+  const wrap = document.getElementById('promoPopupProducts');
+  if (!wrap) return;
+  const list = (typeof PRODUCTS !== 'undefined' ? PRODUCTS : (window.products || [])).filter(p => p.flashSale).slice(0, 3);
+  if (!list.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = list.map(p => {
+    const img = (typeof getProductImage === 'function') ? getProductImage(p.id) : (p.image || '');
+    const disc = p.oldPrice ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+    const price = (typeof formatPrice === 'function') ? formatPrice(p.price) : (p.price + '₫');
+    return `<div class="promo-popup-product" onclick="goToFlashSaleFromPopup()">
+      <img src="${img}" alt="${p.name}" onerror="this.style.opacity='0.3'">
+      <div class="pname">${p.name}</div>
+      <div class="pprice">${price}</div>
+      ${disc ? `<span class="pdisc">-${disc}%</span>` : ''}
+    </div>`;
+  }).join('');
+}
+function tickPromoPopupCountdown() {
+  const h = document.getElementById('hours'), m = document.getElementById('minutes'), s = document.getElementById('seconds');
+  const ph = document.getElementById('promoH'), pm = document.getElementById('promoM'), ps = document.getElementById('promoS');
+  if (h && ph) ph.textContent = h.textContent;
+  if (m && pm) pm.textContent = m.textContent;
+  if (s && ps) ps.textContent = s.textContent;
+}
+function openPromoPopup() {
+  renderPromoPopupProducts();
+  tickPromoPopupCountdown();
+  const overlay = document.getElementById('promoPopupOverlay');
+  if (overlay) overlay.classList.add('open');
+  if (!window._promoPopupInterval) window._promoPopupInterval = setInterval(tickPromoPopupCountdown, 1000);
+  try { sessionStorage.setItem(PROMO_POPUP_SEEN_KEY, '1'); } catch(e) {}
+}
+function closePromoPopup() {
+  const overlay = document.getElementById('promoPopupOverlay');
+  if (overlay) overlay.classList.remove('open');
+  if (window._promoPopupInterval) { clearInterval(window._promoPopupInterval); window._promoPopupInterval = null; }
+}
+function goToFlashSaleFromPopup() {
+  closePromoPopup();
+  const sec = document.querySelector('.flash-sale');
+  if (sec && typeof smoothScrollTo === 'function') smoothScrollTo(sec, 800);
+  else if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('promoPopupOverlay');
+  if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closePromoPopup(); });
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('promoPopupOverlay');
+    if (overlay && overlay.classList.contains('open')) closePromoPopup();
+  }
+});
+window.addEventListener('load', () => {
+  let alreadySeen = false;
+  try { alreadySeen = sessionStorage.getItem(PROMO_POPUP_SEEN_KEY) === '1'; } catch(e) {}
+  if (!alreadySeen) {
+    try { sessionStorage.setItem(PROMO_POPUP_SEEN_KEY, '1'); } catch(e) {}
+    setTimeout(openPromoPopup, PROMO_POPUP_DELAY);
+  }
+});
+
+// ===== ACCOUNT PANEL =====
+document.addEventListener('DOMContentLoaded', () => {
+  const _origOpen = window.openAccountPanel;
+  window.openAccountPanel = function() {
+    if (typeof _origOpen === 'function') _origOpen();
+    const emailBoxEl = document.getElementById('apEmailBox');
+    if (emailBoxEl && currentUser) emailBoxEl.textContent = currentUser.email || '—';
+  };
+});
+</script>
+</body>
+</html>
